@@ -195,10 +195,14 @@
     <div id="empty-msg" class="empty" style="display:none;">아직 담긴 아이템이 없어요</div>
   </div>
 
-<script>
-(function () {
-  const STORAGE_KEY = 'shopping-list-items';
+<script type="module">
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
+const SUPABASE_URL = 'https://oyihvuekqcldijaogrqv.supabase.co';
+const SUPABASE_KEY = 'sb_publishable__ldymIlPgQ0e8RTOP5lv1Q_-k3YW87J';
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+(async function () {
   const input = document.getElementById('item-input');
   const addBtn = document.getElementById('add-btn');
   const list = document.getElementById('list');
@@ -206,51 +210,72 @@
   const clearCheckedBtn = document.getElementById('clear-checked');
   const emptyMsg = document.getElementById('empty-msg');
 
-  let items = loadItems();
+  let items = [];
 
-  function loadItems() {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      return raw ? JSON.parse(raw) : [];
-    } catch (e) {
+  async function loadItems() {
+    const { data, error } = await supabase
+      .from('shopping_items')
+      .select('*')
+      .order('created_at', { ascending: true });
+    if (error) {
+      console.error('Failed to load items:', error);
       return [];
     }
+    return data;
   }
 
-  function saveItems() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
-  }
-
-  function addItem(name) {
+  async function addItem(name) {
     const trimmed = name.trim();
     if (!trimmed) return;
-    items.push({
-      id: crypto.randomUUID(),
-      name: trimmed,
-      checked: false
-    });
-    saveItems();
-    render();
-  }
-
-  function toggleItem(id) {
-    const item = items.find(function (i) { return i.id === id; });
-    if (item) {
-      item.checked = !item.checked;
-      saveItems();
-      render();
+    const { error } = await supabase
+      .from('shopping_items')
+      .insert({ name: trimmed, checked: false });
+    if (error) {
+      console.error('Failed to add item:', error);
+      return;
     }
-  }
-
-  function deleteItem(id) {
-    items = items.filter(function (i) { return i.id !== id; });
-    saveItems();
+    items = await loadItems();
     render();
   }
 
-  function clearChecked() {
-    items = items.filter(function (i) { return !i.checked; });
-    saveItems();
+  async function toggleItem(id) {
+    const item = items.find(function (i) { return i.id === id; });
+    if (!item) return;
+    const { error } = await supabase
+      .from('shopping_items')
+      .update({ checked: !item.checked })
+      .eq('id', id);
+    if (error) {
+      console.error('Failed to toggle item:', error);
+      return;
+    }
+    items = await loadItems();
+    render();
+  }
+
+  async function deleteItem(id) {
+    const { error } = await supabase
+      .from('shopping_items')
+      .delete()
+      .eq('id', id);
+    if (error) {
+      console.error('Failed to delete item:', error);
+      return;
+    }
+    items = await loadItems();
+    render();
+  }
+
+  async function clearChecked() {
+    const { error } = await supabase
+      .from('shopping_items')
+      .delete()
+      .eq('checked', true);
+    if (error) {
+      console.error('Failed to clear checked items:', error);
+      return;
+    }
+    items = await loadItems();
     render();
   }
 
@@ -311,6 +336,7 @@
 
   clearCheckedBtn.addEventListener('click', clearChecked);
 
+  items = await loadItems();
   render();
 })();
 </script>
